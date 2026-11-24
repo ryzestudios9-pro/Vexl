@@ -1,1 +1,240 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VEXL</title>
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #090909;
+  color: #f5f5f5;
+  font-family: Inter, Arial, sans-serif;
+  min-height: 100vh;
+}
+
+header {
+  height: 70px;
+  display: flex;
+  align-items: center;
+  padding: 0 25px;
+  border-bottom: 1px solid #202020;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+main {
+  max-width: 760px;
+  margin: auto;
+  min-height: calc(100vh - 70px);
+  display: flex;
+  flex-direction: column;
+  padding: 25px 20px;
+}
+
+#chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 30px 0;
+}
+
+.welcome {
+  margin: auto;
+  text-align: center;
+}
+
+.welcome h1 {
+  font-size: clamp(27px, 5vw, 38px);
+  font-weight: 500;
+  letter-spacing: -1.5px;
+}
+
+.welcome p {
+  color: #777;
+  font-size: 14px;
+}
+
+.message {
+  max-width: 85%;
+  padding: 14px 17px;
+  border-radius: 18px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.user {
+  align-self: flex-end;
+  background: #252525;
+}
+
+.bot {
+  align-self: flex-start;
+  color: #e6e6e6;
+}
+
+.input-area {
+  position: sticky;
+  bottom: 15px;
+  background: #151515;
+  border: 1px solid #303030;
+  border-radius: 18px;
+  padding: 13px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+textarea {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: white;
+  font: inherit;
+  font-size: 15px;
+  min-height: 27px;
+  max-height: 130px;
+}
+
+textarea::placeholder { color: #777; }
+
+button {
+  border: none;
+  background: white;
+  color: black;
+  border-radius: 11px;
+  width: 38px;
+  height: 38px;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+button:disabled { opacity: .4; cursor: wait; }
+
+footer {
+  text-align: center;
+  padding: 12px;
+  color: #555;
+  font-size: 11px;
+}
+
+@media(max-width: 500px) {
+  main { padding: 15px; }
+  header { padding: 0 18px; }
+  .message { max-width: 95%; }
+}
+</style>
+</head>
+
+<body>
+<header>VEXL</header>
+
+<main>
+  <section id="chat">
+    <div class="welcome" id="welcome">
+      <h1>How can I help you today</h1>
+      <p>Ask anything.</p>
+    </div>
+  </section>
+
+  <div class="input-area">
+    <textarea id="prompt"
+      placeholder="Message VEXL..."
+      rows="1"></textarea>
+    <button id="send" aria-label="Send">↑</button>
+  </div>
+
+  <footer>VEXL</footer>
+</main>
+
+<script>
+const API_URL = "YOUR_CLOUDFLARE_WORKER_URL";
+
+const chat = document.getElementById("chat");
+const input = document.getElementById("prompt");
+const send = document.getElementById("send");
+const welcome = document.getElementById("welcome");
+
+let history = [];
+let busy = false;
+
+function addMessage(text, type) {
+  const div = document.createElement("div");
+  div.className = "message " + type;
+  div.textContent = text;
+  chat.appendChild(div);
+  window.scrollTo(0, document.body.scrollHeight);
+  return div;
+}
+
+async function sendMessage() {
+  const text = input.value.trim();
+  if (!text || busy) return;
+
+  welcome?.remove();
+  input.value = "";
+  input.style.height = "auto";
+
+  addMessage(text, "user");
+  history.push({ role: "user", content: text });
+
+  busy = true;
+  send.disabled = true;
+
+  const loading = addMessage("Thinking...", "bot");
+
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: history.slice(-20) })
+    });
+
+    if (!response.ok) throw new Error("AI request failed.");
+
+    const data = await response.json();
+    const answer = data.reply;
+
+    if (!answer) throw new Error("Empty response.");
+
+    loading.textContent = answer;
+    history.push({ role: "assistant", content: answer });
+
+  } catch (error) {
+    loading.textContent =
+      "Sorry, something went wrong. Please try again.";
+    history.pop();
+    console.error(error);
+  } finally {
+    busy = false;
+    send.disabled = false;
+    input.focus();
+  }
+}
+
+send.addEventListener("click", sendMessage);
+
+input.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+input.addEventListener("input", () => {
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 130) + "px";
+});
+</script>
+</body>
+</html>
+
